@@ -1,6 +1,6 @@
 # chargebee-mcp
 
-Chargebee MCP Service — a stateless HTTP MCP server wrapping the [Chargebee REST API v2](https://apidocs.chargebee.com/docs/api/) for account/customer management use cases (company records, personnel/contacts, subscription lifecycle, payment sources, and financial reporting lookups).
+Chargebee MCP Service — a stateless HTTP MCP server wrapping the [Chargebee REST API v2](https://apidocs.chargebee.com/docs/api/) for account/customer management use cases (company records, personnel/contacts, subscription lookups, and financial reporting lookups).
 
 **Tech stack:** Python 3.12 + uv + FastMCP (Starlette/Uvicorn)
 
@@ -8,15 +8,14 @@ Chargebee MCP Service — a stateless HTTP MCP server wrapping the [Chargebee RE
 
 Chargebee's official [MCP Server](https://www.chargebee.com/docs/billing/2.0/ai-in-chargebee/chargebee-mcp) offering (the "Data Lookup MCP Server") was evaluated first and found unsuitable as a replacement: it is read-only, covers roughly a dozen resource categories, and is missing Coupons, the Item/Item Price/Item Family product-catalog resources, and Upcoming Invoice Estimates entirely — none of which can be added on top of it. This service instead wraps the full Chargebee REST API directly.
 
-Out of Chargebee's ~438 REST API operations across 77 resources, this service implements **30 tools** selected for account/company/personnel/report management use cases:
+Out of Chargebee's ~438 REST API operations across 77 resources, this service started at 30 tools selected for account/company/personnel/report management use cases, then was trimmed down to the **10 core tools** below (user-confirmed reduction — dropped delete/merge/payment-role/hierarchy on customers, all contact write ops, subscription create/update/pause/resume/reactivate/term-end/scheduled-changes, all payment-source tools, and invoice-retrieve/credit-notes from reports):
 
 | Category | Count | Resources |
 |---|---|---|
-| Company (Customer) | 8 | create/retrieve/update/delete/list/merge, payment role assignment, account hierarchy |
-| Personnel (Customer Contacts) | 4 | list/add/update/delete contacts under a customer |
-| Account (Subscription lifecycle) | 10 | create/retrieve/update/list, cancel/pause/resume/reactivate, term-end change, scheduled changes |
-| Account (Payment Sources) | 4 | list/create(card)/update(card)/delete |
-| Report (Invoices/Transactions/Credit Notes) | 4 | list invoices, retrieve invoice, list transactions, list credit notes |
+| Company (Customer) | 4 | create, retrieve, update, list |
+| Personnel (Customer Contacts) | 1 | list contacts under a customer |
+| Account (Subscription) | 3 | list, retrieve, cancel |
+| Report (Invoices/Transactions) | 2 | list invoices, list transactions |
 
 ## Quick Start
 
@@ -99,9 +98,9 @@ uv run chargebee-mcp
 # Each request must include: X-Chargebee-Site and X-Chargebee-Api-Key headers
 ```
 
-## Available Tools (30)
+## Available Tools (10)
 
-### Company (Customer) — 8
+### Company (Customer) — 4
 
 | Tool | Description | Parameters |
 |---|---|---|
@@ -109,52 +108,27 @@ uv run chargebee-mcp
 | `chargebee_create_customer` | Create a customer (company) | `first_name`, `last_name`, `email`, `company`, `phone`, `id`, `auto_collection`, `taxability`, `locale`, `meta_data`, `billing_address` |
 | `chargebee_retrieve_customer` | Retrieve a customer by ID | `customer_id` |
 | `chargebee_update_customer` | Update a customer | `customer_id`, `first_name`, `last_name`, `email`, `company`, `phone`, `auto_collection`, `taxability`, `locale`, `invoice_notes`, `meta_data` |
-| `chargebee_delete_customer` | Delete a customer | `customer_id`, `delete_payment_method` |
-| `chargebee_merge_customers` | Merge one customer into another | `from_customer_id`, `to_customer_id` |
-| `chargebee_assign_payment_role` | Assign a payment source's role (primary/backup) | `customer_id`, `payment_source_id`, `role` |
-| `chargebee_get_customer_hierarchy` | Get account hierarchy for a customer | `customer_id`, `hierarchy_operation_type` |
 
-### Personnel (Customer Contacts) — 4
+### Personnel (Customer Contacts) — 1
 
 | Tool | Description | Parameters |
 |---|---|---|
 | `chargebee_list_customer_contacts` | List contacts under a customer | `customer_id`, `limit`, `offset` |
-| `chargebee_add_customer_contact` | Add a contact to a customer | `customer_id`, `first_name`, `last_name`, `email`, `phone`, `label`, `enabled`, `send_account_email`, `send_billing_email` |
-| `chargebee_update_customer_contact` | Update an existing contact | `customer_id`, `contact_id`, `first_name`, `last_name`, `email`, `phone`, `label`, `enabled`, `send_account_email`, `send_billing_email` |
-| `chargebee_delete_customer_contact` | Delete a contact | `customer_id`, `contact_id` |
 
-### Account (Subscription lifecycle) — 10
+### Account (Subscription) — 3
 
 | Tool | Description | Parameters |
 |---|---|---|
 | `chargebee_list_subscriptions` | List subscriptions | `limit`, `offset`, `include_deleted`, `filters` |
 | `chargebee_retrieve_subscription` | Retrieve a subscription by ID | `subscription_id` |
-| `chargebee_create_subscription` | Create a subscription for a customer | `customer_id`, `subscription_items`, `id`, `start_date`, `trial_end`, `auto_collection`, `po_number`, `coupon_ids`, `payment_source_id`, `invoice_immediately`, `meta_data` |
-| `chargebee_update_subscription` | Update an existing subscription | `subscription_id`, `subscription_items`, `replace_items_list`, `coupon_ids`, `replace_coupon_list`, `prorate`, `end_of_term`, `invoice_immediately`, `po_number`, `meta_data` |
 | `chargebee_cancel_subscription` | Cancel a subscription | `subscription_id`, `cancel_option`, `end_of_term`, `cancel_at`, `cancel_reason_code`, `credit_option_for_current_term_charges`, `unbilled_charges_option` |
-| `chargebee_pause_subscription` | Pause a subscription | `subscription_id`, `pause_option`, `pause_date`, `resume_date`, `unbilled_charges_handling` |
-| `chargebee_resume_subscription` | Resume a paused subscription | `subscription_id`, `resume_option`, `resume_date`, `charges_handling` |
-| `chargebee_reactivate_subscription` | Reactivate a cancelled subscription | `subscription_id`, `trial_end`, `billing_cycles`, `invoice_immediately` |
-| `chargebee_change_subscription_term_end` | Change the current term's end date | `subscription_id`, `term_ends_at`, `prorate`, `invoice_immediately` |
-| `chargebee_retrieve_subscription_with_scheduled_changes` | Retrieve a subscription with pending scheduled changes | `subscription_id` |
 
-### Account (Payment Sources) — 4
-
-| Tool | Description | Parameters |
-|---|---|---|
-| `chargebee_list_payment_sources` | List payment sources | `limit`, `offset`, `subscription_id`, `include_deleted`, `filters` |
-| `chargebee_create_card_payment_source` | Add a card payment source to a customer | `customer_id`, `card`, `replace_primary_payment_source` |
-| `chargebee_update_card_payment_source` | Update card details on a payment source | `payment_source_id`, `card` |
-| `chargebee_delete_payment_source` | Delete a payment source | `payment_source_id` |
-
-### Report (Invoices / Transactions / Credit Notes) — 4
+### Report (Invoices / Transactions) — 2
 
 | Tool | Description | Parameters |
 |---|---|---|
 | `chargebee_list_invoices` | List invoices | `limit`, `offset`, `include_deleted`, `filters` |
-| `chargebee_retrieve_invoice` | Retrieve an invoice by ID | `invoice_id`, `line_items_limit`, `line_items_offset` |
 | `chargebee_list_transactions` | List payment/refund transactions | `limit`, `offset`, `include_deleted`, `filters` |
-| `chargebee_list_credit_notes` | List credit notes | `limit`, `offset`, `include_deleted`, `filters` |
 
 ### Filter parameters
 
@@ -162,16 +136,15 @@ Chargebee's list endpoints use compound filter query keys with an operator suffi
 
 ### Request encoding
 
-Chargebee's REST API uses `application/x-www-form-urlencoded` request bodies, not JSON. Nested object/array parameters (`card`, `billing_address`, `subscription_items`, `meta_data`, etc.) are accepted as plain Python `dict`/`list[dict]` and flattened server-side into Chargebee's bracket-notation form fields (`card[number]=...`, `subscription_items[item_price_id][0]=...`) — see `_flatten_form()` in `api_client.py`.
+Chargebee's REST API uses `application/x-www-form-urlencoded` request bodies, not JSON. Nested object parameters (`billing_address`, `meta_data`) are accepted as plain Python `dict` and flattened server-side into Chargebee's bracket-notation form fields (`billing_address[line1]=...`) — see `_flatten_form()` in `api_client.py`. `_flatten_form()` also supports flattening lists and "array of hashes" fields (Chargebee's `field[subfield][index]=value` convention), but none of the current 10 tools take such a parameter — that code path is currently unexercised.
 
 ## Known Gaps
 
-- **Verified against a live Chargebee account (read-only).** Using a real production API key + site, `chargebee_list_customers`, `chargebee_retrieve_customer`, `chargebee_list_subscriptions`, `chargebee_list_invoices`, `chargebee_list_transactions`, `chargebee_list_credit_notes`, `chargebee_list_payment_sources`, and `chargebee_list_customer_contacts` all returned real data (200) through the running service. Gateway 401 gating was re-confirmed with a fresh MCP session + an invalid API key (correctly rejected by Chargebee with `api_authentication_invalid_key`).
-- **Write operations (create/update/delete/cancel/pause/resume/reactivate/merge) have not been exercised end-to-end** — only verified structurally (schema, request construction). This was a deliberate choice during self-test: the only available credentials are for MSPbots' own live production Chargebee site, and mutating real billing/subscription data to self-test was avoided. If write-path verification is needed, test against a Chargebee **test site** (not a live/production API key).
-- The array-of-hash form encoding (`subscription_items`, `exemption_details`, etc.) is implemented per Chargebee's documented convention but has not been confirmed with a real `POST` call, per the point above.
-- Complex nested fields (`card`, `billing_address`, `subscription_items`, `meta_data`, etc.) are accepted as generic `dict`/`list[dict]` rather than fully-typed sub-schemas — callers must know Chargebee's field names for these substructures (documented in each tool's docstring where practical, otherwise see the [Chargebee API reference](https://apidocs.chargebee.com/docs/api/)).
+- **Verified against a live Chargebee account.** Using a real production API key + site: `chargebee_list_customers`, `chargebee_retrieve_customer`, `chargebee_list_customer_contacts`, `chargebee_list_subscriptions`, `chargebee_list_invoices`, and `chargebee_list_transactions` all returned real data (200) through the running service. Gateway 401 gating was re-confirmed with a fresh MCP session + an invalid API key (correctly rejected by Chargebee with `api_authentication_invalid_key`).
+- **Write operations (`chargebee_create_customer`, `chargebee_update_customer`, `chargebee_cancel_subscription`) have not been exercised end-to-end** — only verified structurally (schema, request construction). This was a deliberate choice during self-test: the only available credentials are for MSPbots' own live production Chargebee site, and mutating real billing/subscription data to self-test was avoided. If write-path verification is needed, test against a Chargebee **test site** (not a live/production API key).
+- Nested fields (`billing_address`, `meta_data`) are accepted as generic `dict` rather than fully-typed sub-schemas — callers must know Chargebee's field names for these substructures (documented in each tool's docstring where practical, otherwise see the [Chargebee API reference](https://apidocs.chargebee.com/docs/api/)).
 - List-endpoint filters are not expanded into named parameters (see "Filter parameters" above) — this keeps the tool count/signature size manageable but pushes filter-key correctness onto the caller.
-- Scope is limited to the 30 operations above (company/personnel/account/report management), not the full 438-operation/77-resource Chargebee API. Resources like Coupons, Items/Item Prices/Item Families, Estimates, Orders, Virtual Bank Accounts, Hosted Pages, etc. are out of scope per user-confirmed selection.
+- Scope is limited to the 10 operations above (company/personnel/account/report management, user-trimmed down from an initial 30). Everything else — Coupons, Items/Item Prices/Item Families, Estimates, Orders, Payment Sources, Credit Notes, subscription create/update/pause/resume/reactivate, customer delete/merge/hierarchy, contact write ops, etc. — is out of scope per user-confirmed selection.
 
 ## API Reference
 

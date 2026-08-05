@@ -1,4 +1,4 @@
-"""Report / financial document lookup tools (invoices, transactions, credit notes).
+"""Report / financial document lookup tools (invoices, transactions).
 
 Tool naming convention: chargebee_<action>_<resource>
 """
@@ -57,31 +57,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             return f"Error: {e}"
 
     @mcp.tool()
-    async def chargebee_retrieve_invoice(
-        invoice_id: str,
-        line_items_limit: int | None = None,
-        line_items_offset: str | None = None,
-    ) -> str:
-        """Retrieve an invoice by ID, including its line items.
-
-        API: GET /invoices/{invoice-id}
-
-        Args:
-            invoice_id: The invoice's unique ID.
-            line_items_limit: Max line items to return per page.
-            line_items_offset: Pagination cursor for line items.
-        """
-        client = client_factory()
-        if client is None:
-            return _NO_CREDS
-        params = {"line_items_limit": line_items_limit, "line_items_offset": line_items_offset}
-        try:
-            result = await client.get(f"/invoices/{invoice_id}", params=params)
-            return json.dumps(result, indent=2)
-        except ChargebeeError as e:
-            return f"Error: {e}"
-
-    @mcp.tool()
     async def chargebee_list_transactions(
         limit: int = 10,
         offset: str | None = None,
@@ -114,44 +89,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             params.update(filters)
         try:
             result = await client.get("/transactions", params=params)
-            return json.dumps(result, indent=2)
-        except ChargebeeError as e:
-            return f"Error: {e}"
-
-    @mcp.tool()
-    async def chargebee_list_credit_notes(
-        limit: int = 10,
-        offset: str | None = None,
-        include_deleted: bool | None = None,
-        filters: dict[str, str] | None = None,
-    ) -> str:
-        """List credit notes.
-
-        API: GET /credit_notes
-
-        Args:
-            limit: Max results per page (1-100, default 10).
-            offset: Pagination cursor from a previous response's next_offset.
-            include_deleted: Include deleted credit notes in the results.
-            filters: Optional Chargebee compound filter fields, passed through
-                as literal query keys, e.g. {"customer_id[is]": "cus123",
-                "status[in]": "[\\"adjusted\\",\\"refunded\\"]"}. Supported
-                fields: id, customer_id, subscription_id, reference_invoice_id,
-                type, reason_code, create_reason_code, status, date, total,
-                price_type, amount_allocated, amount_refunded,
-                amount_available, voided_at, updated_at, channel, einvoice.
-                Supported operators vary by field type: [is], [is_not], [in],
-                [not_in], [between], [after], [before], [on], [none],
-                [is_present].
-        """
-        client = client_factory()
-        if client is None:
-            return _NO_CREDS
-        params: dict = {"limit": limit, "offset": offset, "include_deleted": include_deleted}
-        if filters:
-            params.update(filters)
-        try:
-            result = await client.get("/credit_notes", params=params)
             return json.dumps(result, indent=2)
         except ChargebeeError as e:
             return f"Error: {e}"

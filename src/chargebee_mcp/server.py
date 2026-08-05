@@ -122,11 +122,10 @@ def create_mcp_server(settings: Settings) -> FastMCP:
         return mcp
 
     # Register all tool modules here.
-    from .tools import customers, payment_sources, reports, subscriptions
+    from .tools import customers, reports, subscriptions
 
     customers.register(mcp, client_factory)
     subscriptions.register(mcp, client_factory)
-    payment_sources.register(mcp, client_factory)
     reports.register(mcp, client_factory)
 
     return mcp
