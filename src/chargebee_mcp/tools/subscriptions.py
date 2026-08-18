@@ -47,8 +47,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         ] = None,
     ) -> str:
         """List subscriptions (accounts).
-
-        API: GET /subscriptions
         """
         client = client_factory()
         if client is None:
@@ -71,8 +69,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         subscription_id: Annotated[str, Field(description="The subscription's unique ID.")],
     ) -> str:
         """Retrieve a subscription (account) by ID.
-
-        API: GET /subscriptions/{subscription-id}
         """
         client = client_factory()
         if client is None:
@@ -135,8 +131,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         subscription. This service does not include a reactivate tool, so
         use this only when termination is genuinely intended, not to test
         or preview behavior.
-
-        API: POST /subscriptions/{subscription-id}/cancel_for_items
         """
         if not confirm:
             return error_envelope(

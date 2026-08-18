@@ -51,8 +51,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         Invoices are billing documents — what was charged to the customer (paid,
         pending, or overdue). To check whether a payment/refund actually went
         through, use chargebee_list_transactions instead.
-
-        API: GET /invoices
         """
         client = client_factory()
         if client is None:
@@ -101,8 +99,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         Transactions are the actual payment/refund attempts and their settlement
         outcome (success, failure, etc.) against a gateway. For what was billed
         in the first place (the invoice document), use chargebee_list_invoices.
-
-        API: GET /transactions
         """
         client = client_factory()
         if client is None:

@@ -45,8 +45,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         ] = None,
     ) -> str:
         """List customers (companies).
-
-        API: GET /customers
         """
         client = client_factory()
         if client is None:
@@ -99,8 +97,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         empty call succeeds. In practice, pass at least email or
         first_name/last_name so the resulting customer can be identified
         and matched later.
-
-        API: POST /customers
         """
         client = client_factory()
         if client is None:
@@ -129,8 +125,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         customer_id: Annotated[str, Field(description="The customer's unique ID.")],
     ) -> str:
         """Retrieve a customer (company) by ID.
-
-        API: GET /customers/{customer-id}
         """
         client = client_factory()
         if client is None:
@@ -158,8 +152,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         meta_data: Annotated[dict | None, Field(description="Arbitrary key-value metadata dict.")] = None,
     ) -> str:
         """Update a customer (company).
-
-        API: POST /customers/{customer-id}
         """
         client = client_factory()
         if client is None:
@@ -191,8 +183,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         ] = None,
     ) -> str:
         """List the contacts (personnel) associated with a customer (company).
-
-        API: GET /customers/{customer-id}/contacts
         """
         client = client_factory()
         if client is None:
