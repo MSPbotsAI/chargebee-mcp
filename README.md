@@ -4,6 +4,17 @@ Chargebee MCP Service — a stateless HTTP MCP server wrapping the [Chargebee RE
 
 **Tech stack:** Python 3.12 + uv + FastMCP (Starlette/Uvicorn)
 
+## When would an agent use this
+
+Chargebee is MSPbots' own subscription billing/revenue platform. An agent should reach for this MCP for requests like:
+
+- "Look up this customer's billing account / create a new customer record" → `chargebee_retrieve_customer` / `chargebee_create_customer`
+- "Update this company's billing email or address" → `chargebee_update_customer`
+- "Who are the contacts under this account?" → `chargebee_list_customer_contacts`
+- "What subscription plan is this customer on, is it active?" → `chargebee_list_subscriptions` (filter by `customer_id`) or `chargebee_retrieve_subscription`
+- "Cancel this customer's subscription" → `chargebee_cancel_subscription`
+- "Pull this customer's recent invoices / did this transaction go through?" → `chargebee_list_invoices` (what was billed) / `chargebee_list_transactions` (whether payment settled)
+
 ## Scope
 
 Chargebee's official [MCP Server](https://www.chargebee.com/docs/billing/2.0/ai-in-chargebee/chargebee-mcp) offering (the "Data Lookup MCP Server") was evaluated first and found unsuitable as a replacement: it is read-only, covers roughly a dozen resource categories, and is missing Coupons, the Item/Item Price/Item Family product-catalog resources, and Upcoming Invoice Estimates entirely — none of which can be added on top of it. This service instead wraps the full Chargebee REST API directly.
