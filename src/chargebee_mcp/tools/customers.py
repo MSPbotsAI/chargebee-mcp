@@ -3,23 +3,22 @@
 Tool naming convention: chargebee_<action>_<resource>
 """
 
-import json
 from collections.abc import Callable
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from .._json import dump_json_capped
 from ..api_client import ChargebeeClient, ChargebeeError
+from ._common import NO_CREDS
 
-_NO_CREDS = (
-    "Error: No Chargebee credentials configured. Set CHARGEBEE_SITE/CHARGEBEE_API_KEY "
-    "or use AUTH_MODE=gateway."
-)
+_MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
 
 def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None]) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_customers(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
         offset: Annotated[
@@ -51,15 +50,19 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
-        params: dict = {"limit": limit, "offset": offset, "include_deleted": include_deleted}
+            return NO_CREDS
+        params: dict = {
+            "limit": min(limit, _MAX_LIMIT),
+            "offset": offset,
+            "include_deleted": include_deleted,
+        }
         if filters:
             params.update(filters)
         try:
             result = await client.get("/customers", params=params)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
     @mcp.tool()
     async def chargebee_create_customer(
@@ -101,7 +104,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         body = {
             "id": id,
             "first_name": first_name,
@@ -117,11 +120,11 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         }
         try:
             result = await client.post("/customers", body)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_retrieve_customer(
         customer_id: Annotated[str, Field(description="The customer's unique ID.")],
     ) -> str:
@@ -131,14 +134,14 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         try:
             result = await client.get(f"/customers/{customer_id}")
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
     async def chargebee_update_customer(
         customer_id: Annotated[str, Field(description="The customer's unique ID.")],
         first_name: Annotated[str | None, Field(description="Customer's first name.")] = None,
@@ -160,7 +163,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         body = {
             "first_name": first_name,
             "last_name": last_name,
@@ -175,11 +178,11 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         }
         try:
             result = await client.post(f"/customers/{customer_id}", body)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_customer_contacts(
         customer_id: Annotated[str, Field(description="The customer's unique ID.")],
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
@@ -193,11 +196,12 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         try:
             result = await client.get(
-                f"/customers/{customer_id}/contacts", params={"limit": limit, "offset": offset}
+                f"/customers/{customer_id}/contacts",
+                params={"limit": min(limit, _MAX_LIMIT), "offset": offset},
             )
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()

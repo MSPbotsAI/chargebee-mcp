@@ -3,23 +3,22 @@
 Tool naming convention: chargebee_<action>_<resource>
 """
 
-import json
 from collections.abc import Callable
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from .._json import dump_json_capped
 from ..api_client import ChargebeeClient, ChargebeeError
+from ._common import NO_CREDS
 
-_NO_CREDS = (
-    "Error: No Chargebee credentials configured. Set CHARGEBEE_SITE/CHARGEBEE_API_KEY "
-    "or use AUTH_MODE=gateway."
-)
+_MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
 
 def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None]) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_invoices(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
         offset: Annotated[
@@ -57,17 +56,21 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
-        params: dict = {"limit": limit, "offset": offset, "include_deleted": include_deleted}
+            return NO_CREDS
+        params: dict = {
+            "limit": min(limit, _MAX_LIMIT),
+            "offset": offset,
+            "include_deleted": include_deleted,
+        }
         if filters:
             params.update(filters)
         try:
             result = await client.get("/invoices", params=params)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_transactions(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
         offset: Annotated[
@@ -103,12 +106,16 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
-        params: dict = {"limit": limit, "offset": offset, "include_deleted": include_deleted}
+            return NO_CREDS
+        params: dict = {
+            "limit": min(limit, _MAX_LIMIT),
+            "offset": offset,
+            "include_deleted": include_deleted,
+        }
         if filters:
             params.update(filters)
         try:
             result = await client.get("/transactions", params=params)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()

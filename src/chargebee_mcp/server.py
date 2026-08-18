@@ -94,6 +94,25 @@ def create_mcp_server(settings: Settings) -> FastMCP:
     # mcp-gateway on an internal Docker network and is never publicly exposed.
     mcp = FastMCP(
         name="chargebee-mcp",
+        instructions=(
+            "Chargebee is a subscription billing and revenue-management platform. "
+            "This server manages company/customer records, personnel contacts, "
+            "subscription lifecycle, and financial reporting lookups (invoices, "
+            "transactions). Use it for: looking up or creating a billing account "
+            "(chargebee_retrieve_customer / chargebee_create_customer), updating "
+            "billing details (chargebee_update_customer, idempotent), listing the "
+            "contacts under an account (chargebee_list_customer_contacts), checking "
+            "subscription plan/status (chargebee_list_subscriptions filtered by "
+            "customer_id, or chargebee_retrieve_subscription), and reviewing billing "
+            "history — chargebee_list_invoices for what was charged vs "
+            "chargebee_list_transactions for whether a payment/refund actually "
+            "settled. chargebee_cancel_subscription ends a paying customer's "
+            "subscription; it is destructive/irreversible and requires confirm=true. "
+            "Typical flow: chargebee_list_customers or chargebee_retrieve_customer to "
+            "find an account, then chargebee_list_subscriptions(customer_id=...) for "
+            "its plans, then chargebee_list_invoices/chargebee_list_transactions for "
+            "billing history. 7 of 10 tools are read-only queries."
+        ),
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 

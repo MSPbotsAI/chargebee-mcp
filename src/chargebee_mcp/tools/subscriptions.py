@@ -3,23 +3,22 @@
 Tool naming convention: chargebee_<action>_<resource>
 """
 
-import json
 from collections.abc import Callable
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from .._json import dump_json_capped, error_envelope
 from ..api_client import ChargebeeClient, ChargebeeError
+from ._common import NO_CREDS
 
-_NO_CREDS = (
-    "Error: No Chargebee credentials configured. Set CHARGEBEE_SITE/CHARGEBEE_API_KEY "
-    "or use AUTH_MODE=gateway."
-)
+_MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
 
 def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None]) -> None:
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_subscriptions(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
         offset: Annotated[
@@ -53,17 +52,21 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
-        params: dict = {"limit": limit, "offset": offset, "include_deleted": include_deleted}
+            return NO_CREDS
+        params: dict = {
+            "limit": min(limit, _MAX_LIMIT),
+            "offset": offset,
+            "include_deleted": include_deleted,
+        }
         if filters:
             params.update(filters)
         try:
             result = await client.get("/subscriptions", params=params)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_retrieve_subscription(
         subscription_id: Annotated[str, Field(description="The subscription's unique ID.")],
     ) -> str:
@@ -73,14 +76,14 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         """
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         try:
             result = await client.get(f"/subscriptions/{subscription_id}")
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(destructiveHint=True))
     async def chargebee_cancel_subscription(
         subscription_id: Annotated[str, Field(description="The subscription's unique ID.")],
         confirm: Annotated[
@@ -136,10 +139,12 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         API: POST /subscriptions/{subscription-id}/cancel_for_items
         """
         if not confirm:
-            return "Error: destructive operation requires confirm=true"
+            return error_envelope(
+                "invalid_argument", "destructive operation requires confirm=true", False
+            )
         client = client_factory()
         if client is None:
-            return _NO_CREDS
+            return NO_CREDS
         body = {
             "cancel_option": cancel_option,
             "end_of_term": end_of_term,
@@ -150,6 +155,6 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         }
         try:
             result = await client.post(f"/subscriptions/{subscription_id}/cancel_for_items", body)
-            return json.dumps(result, indent=2)
+            return dump_json_capped(result)
         except ChargebeeError as e:
-            return f"Error: {e}"
+            return e.to_envelope()
