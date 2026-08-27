@@ -4,7 +4,7 @@ Tool naming convention: chargebee_<action>_<resource>
 """
 
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -12,7 +12,13 @@ from pydantic import Field
 
 from .._json import dump_json_capped, error_envelope
 from ..api_client import ChargebeeClient, ChargebeeError
-from ._common import NO_CREDS
+from ._common import NO_CREDS, OFFSET_DESC
+
+# Verified against Chargebee's own OpenAPI spec (github.com/chargebee/openapi,
+# paths./subscriptions/{subscription-id}/cancel_for_items, checked 2026-08-27).
+CancelOption = Literal["immediately", "end_of_term", "specific_date", "end_of_billing_term"]
+CreditOption = Literal["none", "prorate", "full", "consumption_based"]
+UnbilledChargesOption = Literal["invoice", "delete"]
 
 _MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
@@ -21,9 +27,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_subscriptions(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[
-            str | None, Field(description="Pagination cursor from a previous response's next_offset.")
-        ] = None,
+        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted subscriptions in the results.")
         ] = None,
@@ -66,7 +70,18 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_retrieve_subscription(
-        subscription_id: Annotated[str, Field(description="The subscription's unique ID.")],
+        subscription_id: Annotated[
+            str,
+            Field(
+                description=(
+                    "The subscription's unique ID — NOT the customer_id. These "
+                    "are different Chargebee objects (a customer can have "
+                    "multiple subscriptions); if you only have a customer_id, "
+                    "use chargebee_list_subscriptions with "
+                    '{"customer_id[is]": "..."} instead of guessing.'
+                )
+            ),
+        ],
     ) -> str:
         """Retrieve a subscription (account) by ID.
         """
@@ -86,7 +101,19 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             bool, Field(description="Required — must be set to true to proceed.")
         ] = False,
         cancel_option: Annotated[
-            str | None, Field(description='"immediately", "end_of_term", or "specific_date".')
+            CancelOption | None,
+            Field(
+                description=(
+                    '"immediately" (right now); "end_of_term" (end of the '
+                    "CURRENT billing cycle — whatever date that naturally "
+                    'falls on, NOT a specific calendar date); "specific_date" '
+                    "(a chosen calendar date/time — requires cancel_at; use "
+                    'this, not end_of_term, for "cancel at the end of '
+                    '[a specific month/date]"); "end_of_billing_term" (end of '
+                    "the advance-billed term if billed for future renewals, "
+                    "otherwise same as end_of_term)."
+                )
+            ),
         ] = None,
         end_of_term: Annotated[
             bool | None,
@@ -107,30 +134,32 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             Field(description="A reason code configured in your Chargebee site for this cancellation."),
         ] = None,
         credit_option_for_current_term_charges: Annotated[
-            str | None,
+            CreditOption | None,
             Field(
                 description=(
-                    '"prorate", "full", or "none" — '
+                    '"none", "prorate", "full", or "consumption_based" — '
                     "how to credit unused charges for the current term."
                 )
             ),
         ] = None,
         unbilled_charges_option: Annotated[
-            str | None,
+            UnbilledChargesOption | None,
             Field(
                 description=(
-                    '"invoice", "delete", or "carry_forward" — how '
-                    "to handle unbilled usage charges."
+                    '"invoice" or "delete" — how to handle unbilled usage '
+                    'charges. Only applies when cancel_option="immediately".'
                 )
             ),
         ] = None,
     ) -> str:
         """Cancel a subscription (account).
 
-        ⚠️ DESTRUCTIVE. Requires confirm=true. Ends a paying customer's
-        subscription. This service does not include a reactivate tool, so
-        use this only when termination is genuinely intended, not to test
-        or preview behavior.
+        ⚠️ DESTRUCTIVE, no undo (no reactivate tool exists here). confirm=true
+        is a mechanical gate, NOT proof of user consent — set it only when a
+        human operator has explicitly told you, in this conversation, to
+        cancel this specific subscription now. A relayed customer request or
+        an eligible-looking subscription is not enough; ask the operator to
+        confirm first.
         """
         if not confirm:
             return error_envelope(

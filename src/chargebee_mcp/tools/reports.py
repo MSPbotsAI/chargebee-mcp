@@ -12,7 +12,7 @@ from pydantic import Field
 
 from .._json import dump_json_capped
 from ..api_client import ChargebeeClient, ChargebeeError
-from ._common import NO_CREDS
+from ._common import NO_CREDS, OFFSET_DESC
 
 _MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
@@ -21,9 +21,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_invoices(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[
-            str | None, Field(description="Pagination cursor from a previous response's next_offset.")
-        ] = None,
+        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted invoices in the results.")
         ] = None,
@@ -48,9 +46,11 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     ) -> str:
         """List invoices.
 
-        Invoices are billing documents — what was charged to the customer (paid,
-        pending, or overdue). To check whether a payment/refund actually went
-        through, use chargebee_list_transactions instead.
+        Invoices are billing documents — what was charged (paid/posted/
+        payment_due/not_paid/voided/pending). For settlement outcome (did it
+        go through/settle/fail), use chargebee_list_transactions instead. For
+        a bare "payment status" with no clearer signal, prefer this tool —
+        only use list_transactions when settled/went-through/failed is explicit.
         """
         client = client_factory()
         if client is None:
@@ -71,9 +71,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_transactions(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[
-            str | None, Field(description="Pagination cursor from a previous response's next_offset.")
-        ] = None,
+        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted transactions in the results.")
         ] = None,
@@ -87,9 +85,12 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
                     "fields: id, customer_id, subscription_id, payment_source_id, "
                     "payment_method, gateway, gateway_account_id, id_at_gateway, "
                     "reference_number, type, date, amount, amount_capturable, "
-                    "status, updated_at. Supported operators vary by field type: "
-                    "[is], [is_not], [in], [not_in], [between], [after], [before], "
-                    "[on], [none], [is_present]."
+                    "status, updated_at. status values: in_progress/success/"
+                    "voided/failure/timeout/needs_attention/late_failure. type "
+                    "values: authorization/payment/refund/payment_reversal. "
+                    "Supported operators vary by field type: [is], [is_not], "
+                    "[in], [not_in], [between], [after], [before], [on], [none], "
+                    "[is_present]."
                 )
             ),
         ] = None,
@@ -98,7 +99,9 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
 
         Transactions are the actual payment/refund attempts and their settlement
         outcome (success, failure, etc.) against a gateway. For what was billed
-        in the first place (the invoice document), use chargebee_list_invoices.
+        in the first place (the invoice document, not settlement), use
+        chargebee_list_invoices instead — that's the better default for a bare
+        "payment status" request unless settled/went-through/failed is explicit.
         """
         client = client_factory()
         if client is None:

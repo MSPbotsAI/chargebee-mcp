@@ -12,7 +12,7 @@ from pydantic import Field
 
 from .._json import dump_json_capped
 from ..api_client import ChargebeeClient, ChargebeeError
-from ._common import NO_CREDS
+from ._common import CUSTOMER_ID_NOTE, NO_CREDS, OFFSET_DESC, AutoCollection, Taxability
 
 _MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
@@ -21,9 +21,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_customers(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[
-            str | None, Field(description="Pagination cursor from a previous response's next_offset.")
-        ] = None,
+        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted customers in the results.")
         ] = None,
@@ -73,9 +71,12 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             str | None, Field(description="Optional custom customer ID (auto-generated if omitted).")
         ] = None,
         auto_collection: Annotated[
-            str | None, Field(description='"on" or "off" — whether invoices are auto-collected.')
+            AutoCollection | None,
+            Field(description='"on" or "off" — whether invoices are auto-collected.'),
         ] = None,
-        taxability: Annotated[str | None, Field(description='"taxable" or "exempt".')] = None,
+        taxability: Annotated[
+            Taxability | None, Field(description='"taxable" or "exempt".')
+        ] = None,
         locale: Annotated[
             str | None, Field(description='Customer\'s locale (e.g. "en", "fr-CA").')
         ] = None,
@@ -90,13 +91,13 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             ),
         ] = None,
     ) -> str:
-        """Create a customer (company).
+        """Create a NEW customer — never an edit. For an existing customer
+        ("update X's email"), use chargebee_update_customer instead (resolve
+        customer_id via chargebee_list_customers first); this tool has no
+        required fields and will happily create a duplicate.
 
-        Chargebee does not require any single field to create a customer —
-        every field here is genuinely optional at the API level, and an
-        empty call succeeds. In practice, pass at least email or
-        first_name/last_name so the resulting customer can be identified
-        and matched later.
+        Every field is optional and an empty call succeeds — pass at least
+        email or first_name/last_name so the customer can be matched later.
         """
         client = client_factory()
         if client is None:
@@ -122,7 +123,9 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_retrieve_customer(
-        customer_id: Annotated[str, Field(description="The customer's unique ID.")],
+        customer_id: Annotated[
+            str, Field(description="The customer's unique ID." + CUSTOMER_ID_NOTE)
+        ],
     ) -> str:
         """Retrieve a customer (company) by ID.
         """
@@ -137,14 +140,18 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
 
     @mcp.tool(annotations=ToolAnnotations(idempotentHint=True))
     async def chargebee_update_customer(
-        customer_id: Annotated[str, Field(description="The customer's unique ID.")],
+        customer_id: Annotated[
+            str, Field(description="The customer's unique ID." + CUSTOMER_ID_NOTE)
+        ],
         first_name: Annotated[str | None, Field(description="Customer's first name.")] = None,
         last_name: Annotated[str | None, Field(description="Customer's last name.")] = None,
         email: Annotated[str | None, Field(description="Customer's email address.")] = None,
         company: Annotated[str | None, Field(description="Company name.")] = None,
         phone: Annotated[str | None, Field(description="Phone number.")] = None,
-        auto_collection: Annotated[str | None, Field(description='"on" or "off".')] = None,
-        taxability: Annotated[str | None, Field(description='"taxable" or "exempt".')] = None,
+        auto_collection: Annotated[AutoCollection | None, Field(description='"on" or "off".')] = None,
+        taxability: Annotated[
+            Taxability | None, Field(description='"taxable" or "exempt".')
+        ] = None,
         locale: Annotated[str | None, Field(description="Customer's locale.")] = None,
         invoice_notes: Annotated[
             str | None, Field(description="Default notes shown on the customer's invoices.")
@@ -176,11 +183,11 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_customer_contacts(
-        customer_id: Annotated[str, Field(description="The customer's unique ID.")],
+        customer_id: Annotated[
+            str, Field(description="The customer's unique ID." + CUSTOMER_ID_NOTE)
+        ],
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[
-            str | None, Field(description="Pagination cursor from a previous response's next_offset.")
-        ] = None,
+        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
     ) -> str:
         """List the contacts (personnel) associated with a customer (company).
         """
