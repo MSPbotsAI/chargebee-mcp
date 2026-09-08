@@ -1,0 +1,142 @@
+[
+  {
+    "id": "TC-CBM-001",
+    "ac": "AC1",
+    "text": "Given 首页结果超过 100 条, When 把响应里的 page_cursor 传回 offset 再次调用, Then 不再报参数校验错误、不再被 Chargebee 拒绝，返回紧接首页之后的数据",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现：dev 用它作红绿目标，写完 tests/test_pagination.py 后回填 tests 数组"
+  },
+  {
+    "id": "TC-CBM-002",
+    "ac": "AC1",
+    "text": "Given 同上场景, When 改用响应里原始 next_offset（而不是 page_cursor）传回 offset, Then 同样成功——向后兼容路径",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-003",
+    "ac": "AC2",
+    "text": "Given 结果集恰好是页大小整数倍且还有更多数据, When 连续翻页直到某次响应无游标, Then 累计取到的行数与总数一致、无重复无遗漏",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-004",
+    "ac": "AC3",
+    "text": "Given 结果集不超过 100 条, When 调用工具, Then 响应体不含 page_cursor / next_offset",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-005",
+    "ac": "AC4",
+    "text": "Given mock 一页数据使序列化结果超过 20000 字符, When 调用工具, Then 触发二次请求，返回的游标对应二次请求的 limit，不是裁剪前的游标",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现；这是复现 OQ-3 裁剪-游标一致性缺陷的关键用例，第一次跑必须先失败"
+  },
+  {
+    "id": "TC-CBM-006",
+    "ac": "AC5",
+    "text": "Given offset 传入一个无法被识别/解码的字符串, When 调用工具, Then 返回结构化 invalid_argument 错误，不抛未捕获异常",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-007",
+    "ac": "AC6",
+    "text": "Given 两个不同租户（不同 X-Chargebee-Site / X-Chargebee-Api-Key）各自的凭据, When 用租户 A 的游标发起调用, Then 只能取到租户 A 自己站点的数据，不能取到租户 B 的",
+    "type": "manual",
+    "steps": [
+      "准备两个 Chargebee 测试站点的凭据（站点 A、站点 B）",
+      "对站点 A 调用 chargebee_list_subscriptions 拿到一页数据和 page_cursor",
+      "用站点 A 的 page_cursor，但把请求头换成站点 B 的 X-Chargebee-Site / X-Chargebee-Api-Key 再次调用",
+      "对比两次返回的数据所属站点"
+    ],
+    "expect": "第二次调用要么报错（游标与当前站点不匹配），要么返回的是站点 B 自己的数据——绝不能返回站点 A 的数据",
+    "result": "untested",
+    "notes": "需要两个 Chargebee 测试站点凭据，不能用生产 key；本单跨租户越权锚点用例之一"
+  },
+  {
+    "id": "TC-CBM-008",
+    "ac": "AC7",
+    "text": "Given 不传 offset 调用工具, When 检查响应体, Then 原始 next_offset 字段仍然存在且值不变（相对于本次改动前的行为）",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-009",
+    "ac": "AC8",
+    "text": "Given offset 传入空字符串, When 调用工具, Then 等价于不传，返回首页且不报错",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现"
+  },
+  {
+    "id": "TC-CBM-010",
+    "ac": "AC8",
+    "text": "Given 完全不传 offset, When 调用工具, Then 返回首页且不报错",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现；与 TC-CBM-009 分别验证两种'未提供'的输入形态"
+  },
+  {
+    "id": "TC-CBM-011",
+    "ac": "AC9",
+    "text": "Given Chargebee 测试站点里存在超过 100 条订阅数据, When 端到端连续翻页, Then 从真实 Chargebee API 拿到完整数据集，不是靠 mock 断言通过",
+    "type": "manual",
+    "steps": [
+      "准备一个 Chargebee 测试站点，确保订阅数量 > 100",
+      "用测试站点凭据调用 chargebee_list_subscriptions（limit=100，不传 offset）",
+      "拿到 page_cursor 后再次调用，重复直到无游标",
+      "统计累计条数与站点后台实际订阅总数对比"
+    ],
+    "expect": "累计条数与站点后台实际总数一致，过程中无报错",
+    "result": "untested",
+    "notes": "需要 Chargebee 测试站点凭据且该站点需有 >100 条订阅数据，不能用生产 key；凭据到位前记 blocked，见文档 OQ-4"
+  },
+  {
+    "id": "TC-CBM-012",
+    "ac": "AC10",
+    "text": "Given 复现工单原始场景（Weekly MRR Movement，sopId 281，某个超过 100 行的周期）, When 智能体按新分页方式跑一遍, Then 拿到该周期完整数据，不再停在第 100 行",
+    "type": "manual",
+    "steps": [
+      "在测试环境以只读 dry-run 方式重跑 Weekly MRR Movement 智能体（sopId 281），周期选一个已知 Chargebee 数据超过 100 行的周期",
+      "观察智能体对 chargebee_list_subscriptions/_list_invoices/_list_transactions 的调用轨迹与返回条数",
+      "核对最终产出的报告数据是否覆盖了完整周期，而不是只有前 100 行"
+    ],
+    "expect": "报告数据完整覆盖该周期全部行，智能体日志显示发生了不止一次分页调用且均未报错",
+    "result": "untested",
+    "notes": "端到端回归，直接对应工单最初的复现步骤；需要测试环境+可复现的智能体运行条件"
+  },
+  {
+    "id": "TC-CBM-013",
+    "ac": "AC5",
+    "text": "Given offset 传入一个合法 JSON 数组字符串但内容是随意编造的（不是任何工具签发过的值）, When 调用工具, Then 返回 invalid_argument，不会被误当成合法游标转发给 Chargebee",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现；异常/边界用例，覆盖'看起来合法但语义不合法'的输入"
+  },
+  {
+    "id": "TC-CBM-014",
+    "ac": "AC2",
+    "text": "Given 翻页过程中把另一个工具签发的游标传给本工具（例如把 chargebee_list_invoices 的游标传给 chargebee_list_subscriptions）, When 调用工具, Then 返回 invalid_argument（游标与工具/资源不匹配），不会静默返回错资源的数据或崩溃",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现；异常/边界用例，防止跨资源游标混用"
+  },
+  {
+    "id": "TC-CBM-015",
+    "ac": "AC6",
+    "text": "Given 同一个不透明游标字符串原样发给另一个租户凭据的请求（模拟跨租户重放该游标）, When 调用工具, Then 请求头决定的站点边界生效，返回新租户凭据对应站点的数据（或该站点下该游标本就无效而报错），绝不返回原租户站点的数据",
+    "type": "auto",
+    "tests": [],
+    "notes": "待实现；本单跨租户越权（OWASP API1 BOLA）锚点用例，必须打真实工具调用（后端），不能只看是否暴露在 UI 上——本服务没有 UI，锚点就是直接调用工具本身"
+  }
+]
