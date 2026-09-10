@@ -15,6 +15,37 @@ def _compact(data: Any) -> str:
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
 
+def fits(data: Any, max_chars: int = MAX_CHARS) -> bool:
+    """Pure/sync check: would data serialize within max_chars as-is."""
+    return len(_compact(data)) <= max_chars
+
+
+def fit_count(data: dict, list_key: str, max_chars: int = MAX_CHARS) -> int:
+    """Binary-search the largest prefix of data[list_key] whose serialized
+    form (with the standard truncation envelope fields added) still fits
+    max_chars. Pure/sync, no network IO — exposed so a caller (e.g. a tool
+    function re-requesting a smaller page from an upstream API) can learn
+    the safe row count *before* deciding whether to truncate locally or
+    re-fetch at that size (PRD-17977 AC4: a re-fetched page's own cursor,
+    not a locally-sliced one, is what stays consistent with what was
+    actually returned).
+    """
+    items = data[list_key]
+    lo, hi = 0, len(items)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        candidate = dict(data)
+        candidate[list_key] = items[:mid]
+        candidate["truncated"] = True
+        candidate["truncated_field"] = list_key
+        candidate["original_count"] = len(items)
+        if len(_compact(candidate)) <= max_chars:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
 def dump_json_capped(data: Any, max_chars: int = MAX_CHARS) -> str:
     """Serialize data compactly, truncating the largest list field (or the
     top-level list) if the result would exceed max_chars, rather than ever
@@ -32,18 +63,7 @@ def dump_json_capped(data: Any, max_chars: int = MAX_CHARS) -> str:
         if list_keys:
             key = max(list_keys, key=lambda k: len(_compact(data[k])))
             items = data[key]
-            lo, hi = 0, len(items)
-            while lo < hi:
-                mid = (lo + hi + 1) // 2
-                candidate = dict(data)
-                candidate[key] = items[:mid]
-                candidate["truncated"] = True
-                candidate["truncated_field"] = key
-                candidate["original_count"] = len(items)
-                if len(_compact(candidate)) <= max_chars:
-                    lo = mid
-                else:
-                    hi = mid - 1
+            lo = fit_count(data, key, max_chars)
             candidate = dict(data)
             candidate[key] = items[:lo]
             candidate["truncated"] = True

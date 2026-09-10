@@ -10,9 +10,19 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from .._json import dump_json_capped
+from .._json import dump_json_capped, error_envelope
 from ..api_client import ChargebeeClient, ChargebeeError
-from ._common import CUSTOMER_ID_NOTE, NO_CREDS, OFFSET_DESC, AutoCollection, Taxability
+from ._common import (
+    CUSTOMER_ID_NOTE,
+    NO_CREDS,
+    OFFSET_DESC,
+    AutoCollection,
+    InvalidCursorError,
+    Taxability,
+    decode_cursor,
+    list_with_cursor,
+    to_request_offset,
+)
 
 _MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
@@ -21,7 +31,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_customers(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
+        offset: Annotated[str | list[str] | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted customers in the results.")
         ] = None,
@@ -47,16 +57,23 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         client = client_factory()
         if client is None:
             return NO_CREDS
-        params: dict = {
-            "limit": min(limit, _MAX_LIMIT),
-            "offset": offset,
-            "include_deleted": include_deleted,
-        }
-        if filters:
-            params.update(filters)
         try:
-            result = await client.get("/customers", params=params)
-            return dump_json_capped(result)
+            chargebee_offset = decode_cursor(offset, "customers")
+        except InvalidCursorError as e:
+            return error_envelope("invalid_argument", str(e), False)
+
+        async def fetch(page_limit: int) -> dict:
+            params: dict = {
+                "limit": page_limit,
+                "offset": to_request_offset(chargebee_offset),
+                "include_deleted": include_deleted,
+            }
+            if filters:
+                params.update(filters)
+            return await client.get("/customers", params=params)
+
+        try:
+            return await list_with_cursor("customers", fetch, min(limit, _MAX_LIMIT))
         except ChargebeeError as e:
             return e.to_envelope()
 
@@ -187,7 +204,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
             str, Field(description="The customer's unique ID." + CUSTOMER_ID_NOTE)
         ],
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
+        offset: Annotated[str | list[str] | None, Field(description=OFFSET_DESC)] = None,
     ) -> str:
         """List the contacts (personnel) associated with a customer (company).
         """
@@ -195,10 +212,17 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         if client is None:
             return NO_CREDS
         try:
-            result = await client.get(
+            chargebee_offset = decode_cursor(offset, "customer_contacts")
+        except InvalidCursorError as e:
+            return error_envelope("invalid_argument", str(e), False)
+
+        async def fetch(page_limit: int) -> dict:
+            return await client.get(
                 f"/customers/{customer_id}/contacts",
-                params={"limit": min(limit, _MAX_LIMIT), "offset": offset},
+                params={"limit": page_limit, "offset": to_request_offset(chargebee_offset)},
             )
-            return dump_json_capped(result)
+
+        try:
+            return await list_with_cursor("customer_contacts", fetch, min(limit, _MAX_LIMIT))
         except ChargebeeError as e:
             return e.to_envelope()

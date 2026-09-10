@@ -10,9 +10,16 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from .._json import dump_json_capped
+from .._json import error_envelope
 from ..api_client import ChargebeeClient, ChargebeeError
-from ._common import NO_CREDS, OFFSET_DESC
+from ._common import (
+    NO_CREDS,
+    OFFSET_DESC,
+    InvalidCursorError,
+    decode_cursor,
+    list_with_cursor,
+    to_request_offset,
+)
 
 _MAX_LIMIT = 100  # Chargebee's own documented per_page max
 
@@ -21,7 +28,7 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_invoices(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
+        offset: Annotated[str | list[str] | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted invoices in the results.")
         ] = None,
@@ -55,23 +62,30 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         client = client_factory()
         if client is None:
             return NO_CREDS
-        params: dict = {
-            "limit": min(limit, _MAX_LIMIT),
-            "offset": offset,
-            "include_deleted": include_deleted,
-        }
-        if filters:
-            params.update(filters)
         try:
-            result = await client.get("/invoices", params=params)
-            return dump_json_capped(result)
+            chargebee_offset = decode_cursor(offset, "invoices")
+        except InvalidCursorError as e:
+            return error_envelope("invalid_argument", str(e), False)
+
+        async def fetch(page_limit: int) -> dict:
+            params: dict = {
+                "limit": page_limit,
+                "offset": to_request_offset(chargebee_offset),
+                "include_deleted": include_deleted,
+            }
+            if filters:
+                params.update(filters)
+            return await client.get("/invoices", params=params)
+
+        try:
+            return await list_with_cursor("invoices", fetch, min(limit, _MAX_LIMIT))
         except ChargebeeError as e:
             return e.to_envelope()
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     async def chargebee_list_transactions(
         limit: Annotated[int, Field(description="Max results per page (1-100, default 10).")] = 10,
-        offset: Annotated[str | None, Field(description=OFFSET_DESC)] = None,
+        offset: Annotated[str | list[str] | None, Field(description=OFFSET_DESC)] = None,
         include_deleted: Annotated[
             bool | None, Field(description="Include deleted transactions in the results.")
         ] = None,
@@ -106,15 +120,22 @@ def register(mcp: FastMCP, client_factory: Callable[[], ChargebeeClient | None])
         client = client_factory()
         if client is None:
             return NO_CREDS
-        params: dict = {
-            "limit": min(limit, _MAX_LIMIT),
-            "offset": offset,
-            "include_deleted": include_deleted,
-        }
-        if filters:
-            params.update(filters)
         try:
-            result = await client.get("/transactions", params=params)
-            return dump_json_capped(result)
+            chargebee_offset = decode_cursor(offset, "transactions")
+        except InvalidCursorError as e:
+            return error_envelope("invalid_argument", str(e), False)
+
+        async def fetch(page_limit: int) -> dict:
+            params: dict = {
+                "limit": page_limit,
+                "offset": to_request_offset(chargebee_offset),
+                "include_deleted": include_deleted,
+            }
+            if filters:
+                params.update(filters)
+            return await client.get("/transactions", params=params)
+
+        try:
+            return await list_with_cursor("transactions", fetch, min(limit, _MAX_LIMIT))
         except ChargebeeError as e:
             return e.to_envelope()

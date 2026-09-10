@@ -4,48 +4,54 @@
     "ac": "AC1",
     "text": "Given 首页结果超过 100 条, When 把响应里的 page_cursor 传回 offset 再次调用, Then 不再报参数校验错误、不再被 Chargebee 拒绝，返回紧接首页之后的数据",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现：dev 用它作红绿目标，写完 tests/test_pagination.py 后回填 tests 数组"
+    "tests": ["tests/test_pagination.py::test_page_cursor_round_trip_gets_page_two"],
+    "result": "pass",
+    "notes": "red->green：改前用真实 offset:str|None 签名跑同一断言会在 Pydantic 校验阶段直接拒绝；改后 28/28 通过（见 docs/tickets/PRD-17977.md 自测节）"
   },
   {
     "id": "TC-CBM-002",
     "ac": "AC1",
     "text": "Given 同上场景, When 改用响应里原始 next_offset（而不是 page_cursor）传回 offset, Then 同样成功——向后兼容路径",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_raw_next_offset_passed_back_also_works"],
+    "result": "pass",
+    "notes": "验证原始 next_offset（2 元素数组）经 MCP 预解析后按 list[str] 直接透传给 Chargebee 仍可用"
   },
   {
     "id": "TC-CBM-003",
     "ac": "AC2",
     "text": "Given 结果集恰好是页大小整数倍且还有更多数据, When 连续翻页直到某次响应无游标, Then 累计取到的行数与总数一致、无重复无遗漏",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_consecutive_pages_cover_full_set_no_gaps_no_dupes"],
+    "result": "pass",
+    "notes": "3 页共 5 行，逐页用上一页的 page_cursor 驱动，累计结果与预期顺序完全一致"
   },
   {
     "id": "TC-CBM-004",
     "ac": "AC3",
     "text": "Given 结果集不超过 100 条, When 调用工具, Then 响应体不含 page_cursor / next_offset",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_single_page_has_no_cursor_fields"],
+    "result": "pass",
+    "notes": "Chargebee 未返回 next_offset 时不会新造一个游标字段"
   },
   {
     "id": "TC-CBM-005",
     "ac": "AC4",
     "text": "Given mock 一页数据使序列化结果超过 20000 字符, When 调用工具, Then 触发二次请求，返回的游标对应二次请求的 limit，不是裁剪前的游标",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现；这是复现 OQ-3 裁剪-游标一致性缺陷的关键用例，第一次跑必须先失败"
+    "tests": ["tests/test_pagination.py::test_oversized_page_triggers_refetch_with_matching_cursor"],
+    "result": "pass",
+    "notes": "red->green 关键用例：改前会直接返回本地切片+原游标（游标与实际返回行不一致）；改后二次请求 limit 从 40 降到 fit_count 算出的安全值，返回的 next_offset 是二次请求自己的游标"
   },
   {
     "id": "TC-CBM-006",
     "ac": "AC5",
     "text": "Given offset 传入一个无法被识别/解码的字符串, When 调用工具, Then 返回结构化 invalid_argument 错误，不抛未捕获异常",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_garbage_offset_is_invalid_argument_not_a_crash"],
+    "result": "pass",
+    "notes": "断言未捕获异常不会冒出、且 Chargebee 从未被调用（fake_client.calls == []）"
   },
   {
     "id": "TC-CBM-007",
@@ -60,31 +66,34 @@
     ],
     "expect": "第二次调用要么报错（游标与当前站点不匹配），要么返回的是站点 B 自己的数据——绝不能返回站点 A 的数据",
     "result": "untested",
-    "notes": "需要两个 Chargebee 测试站点凭据，不能用生产 key；本单跨租户越权锚点用例之一"
+    "notes": "需要两个 Chargebee 测试站点凭据，不能用生产 key；本机/本轮无该凭据，环境阻塞。TC-CBM-015 已用 fake client 覆盖了同等价值的结构性保证（游标不携带租户信息，client_factory 按当前请求上下文解析），但不能替代对 Chargebee 真实站点隔离行为的端到端验证"
   },
   {
     "id": "TC-CBM-008",
     "ac": "AC7",
     "text": "Given 不传 offset 调用工具, When 检查响应体, Then 原始 next_offset 字段仍然存在且值不变（相对于本次改动前的行为）",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_original_next_offset_field_preserved"],
+    "result": "pass",
+    "notes": "同时验证新增 page_cursor 字段存在且格式正确"
   },
   {
     "id": "TC-CBM-009",
     "ac": "AC8",
     "text": "Given offset 传入空字符串, When 调用工具, Then 等价于不传，返回首页且不报错",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现"
+    "tests": ["tests/test_pagination.py::test_empty_string_offset_is_first_page"],
+    "result": "pass",
+    "notes": ""
   },
   {
     "id": "TC-CBM-010",
     "ac": "AC8",
     "text": "Given 完全不传 offset, When 调用工具, Then 返回首页且不报错",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现；与 TC-CBM-009 分别验证两种'未提供'的输入形态"
+    "tests": ["tests/test_pagination.py::test_omitted_offset_is_first_page"],
+    "result": "pass",
+    "notes": "与 TC-CBM-009 分别验证两种'未提供'的输入形态"
   },
   {
     "id": "TC-CBM-011",
@@ -99,7 +108,7 @@
     ],
     "expect": "累计条数与站点后台实际总数一致，过程中无报错",
     "result": "untested",
-    "notes": "需要 Chargebee 测试站点凭据且该站点需有 >100 条订阅数据，不能用生产 key；凭据到位前记 blocked，见文档 OQ-4"
+    "notes": "需要 Chargebee 测试站点凭据且该站点需有 >100 条订阅数据，不能用生产 key；本轮环境无此凭据，环境阻塞，不算失败"
   },
   {
     "id": "TC-CBM-012",
@@ -113,30 +122,33 @@
     ],
     "expect": "报告数据完整覆盖该周期全部行，智能体日志显示发生了不止一次分页调用且均未报错",
     "result": "untested",
-    "notes": "端到端回归，直接对应工单最初的复现步骤；需要测试环境+可复现的智能体运行条件"
+    "notes": "端到端回归，需要测试环境+可复现的智能体运行条件；本轮无该环境，环境阻塞，不算失败"
   },
   {
     "id": "TC-CBM-013",
     "ac": "AC5",
     "text": "Given offset 传入一个合法 JSON 数组字符串但内容是随意编造的（不是任何工具签发过的值）, When 调用工具, Then 返回 invalid_argument，不会被误当成合法游标转发给 Chargebee",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现；异常/边界用例，覆盖'看起来合法但语义不合法'的输入"
+    "tests": ["tests/test_pagination.py::test_invented_json_array_offset_is_rejected"],
+    "result": "pass",
+    "notes": "red->green 关键用例：证明 MCP 预解析会把这个字符串转成真实 list（与真实回传的 next_offset 在 Python 层面无法从类型上区分），必须靠 decode_cursor 的形状校验（首元素须为纯数字，模拟 Chargebee 时间戳游标）拒绝——这条形状校验对真实 Chargebee 返回格式的假设尚未用真实站点验证，见 PRD-17977.md 风险节"
   },
   {
     "id": "TC-CBM-014",
     "ac": "AC2",
     "text": "Given 翻页过程中把另一个工具签发的游标传给本工具（例如把 chargebee_list_invoices 的游标传给 chargebee_list_subscriptions）, When 调用工具, Then 返回 invalid_argument（游标与工具/资源不匹配），不会静默返回错资源的数据或崩溃",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现；异常/边界用例，防止跨资源游标混用"
+    "tests": ["tests/test_pagination.py::test_cursor_from_a_different_tool_is_rejected"],
+    "result": "pass",
+    "notes": "验证 encode_cursor/decode_cursor 的 resource 标签在跨工具场景下生效"
   },
   {
     "id": "TC-CBM-015",
     "ac": "AC6",
     "text": "Given 同一个不透明游标字符串原样发给另一个租户凭据的请求（模拟跨租户重放该游标）, When 调用工具, Then 请求头决定的站点边界生效，返回新租户凭据对应站点的数据（或该站点下该游标本就无效而报错），绝不返回原租户站点的数据",
     "type": "auto",
-    "tests": [],
-    "notes": "待实现；本单跨租户越权（OWASP API1 BOLA）锚点用例，必须打真实工具调用（后端），不能只看是否暴露在 UI 上——本服务没有 UI，锚点就是直接调用工具本身"
+    "tests": ["tests/test_pagination.py::test_cursor_replayed_under_another_tenant_stays_scoped_to_that_tenant"],
+    "result": "pass",
+    "notes": "用两个独立 FakeClient 模拟两个租户，证明 page_cursor 本身不携带租户信息、client_factory 按当前请求上下文解析，同一游标在另一租户下只会打到该租户自己的 fake client，从未触达前一租户的 client——这是结构性证明，不是对 Chargebee 真实站点隔离行为的端到端验证，端到端仍需 TC-CBM-007"
   }
 ]
